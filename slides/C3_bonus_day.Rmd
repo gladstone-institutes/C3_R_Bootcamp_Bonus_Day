@@ -1,0 +1,357 @@
+---
+title: "C3 R Bootcamp Bonus Day"
+author: "Natalie Elphick"
+date: "November 9th"
+output:
+  revealjs::revealjs_presentation:
+    self_contained: false
+    reveal_plugins: ["menu"]
+    css: style.css
+---
+
+```{r, setup, include=FALSE}
+library(tidyverse)
+```
+
+## 
+
+<center>*Press the ? key for tips on navigating these slides*</center>
+
+## Topics
+
+-   RMD notebooks, R projects, and R environments
+
+-   `apply` and `map` functions
+
+-   Intro to Linear Models
+
+-   How to find bioinformatics packages for your use case
+
+-   ChatGPT Tips for Bioinformatics
+
+-   Additional Resources
+
+# RMD notebooks, R projects, and R environments
+
+## R Markdown
+
+-   A file format combining `R` code with [Markdown](https://www.markdownguide.org/basic-syntax/) for text formatting.
+-   Designed for creating reproducible research reports in various formats (HTML, PDF, Word).
+-   Let's create an `Rmd` file in `RStudio` to explore the basics of how they work:
+-   File -\> New File -\> R Markdown
+
+## R Markdown Advanced Usage
+
+-   **Presentations:** Creating slides (like these) with [revealjs](https://github.com/rstudio/revealjs).
+-   **Publications:** Authoring online books that combine narrative, code, and output with [bookdown](https://bookdown.org/).
+-   **Interactive Documents:** Developing interactive tutorials or dashboards with [learnR](https://rstudio.github.io/learnr/) and other embedded applications.
+
+## R Projects
+
+-   A project is just a working directory designated with a `.RProj`
+-   Opening the `.RProj` file sets the working directory to the location of the `.RProj` file
+-   Helps implement a common best practice for data analysis
+    -   Having the input data, R scripts, results and figures all under one directory
+-   See [this chapter](https://r4ds.had.co.nz/workflow-projects.html#workflow-projects) for more information
+
+## R Environments
+
+-   At a basic level the environment is the data structure used to **scope** variables and functions.
+-   **Scoping:** the concept of defining the visibility and accessibility of variables/functions within a program.
+-   Similar to a named `list`, except:
+    -   Every name must be unique.
+    -   The names in an environment are not ordered.
+
+# Apply and Map Functions
+
+## apply()
+
+-   Apply a function over a margin (1 = rows, 2 = columns) and return the results in an array
+
+-   Alternative to for loops
+
+```{r}
+apply(X = cars, MARGIN = 2, FUN =  mean)
+```
+
+-   `apply()` works for matrices and data frames, there is also:
+
+    -   `lapply()` for lists
+
+    -   `vapply()` for vectors
+
+## apply() : custom functions
+
+-   You can supply a custom function within apply
+-   These nameless functions are known as anonymous functions or lambda expressions
+
+```{r}
+apply(X = cars, MARGIN = 2,
+      FUN =  function(col) {
+        col_mean <- sum(col) / length(col)
+        return(col_mean)
+})
+```
+
+-   The above is much faster and more memory efficient than looping
+
+## apply() : Converting for loops to apply
+
+-   Since converting syntax can be tedious this is a good use case for ChatGPT
+-   open the file
+
+## purr::map() : tidyverse apply
+
+-   [map()](https://purrr.tidyverse.org/reference/map.html) functions are used to apply a function to each element of a list or vector
+-   They are type-stable, meaning they always return the same type of output (unlike apply)
+-   `map_lgl()`, `map_int()`, `map_dbl()` and `map_chr()` return a vector of the indicated type
+
+```{r}
+library(purrr)
+map(cars, ~ mean(.x)) 
+```
+
+## purr::map() (cont.)
+
+-   Chaining multiple map calls can be a powerful tool to get complex outputs from a few lines of code
+
+```{r, message=FALSE}
+library(magrittr)
+mtcars %>%
+  split(mtcars$cyl) %>% 
+  map(.f = function(df) lm(mpg ~ wt, data = df)) %>%
+  map(summary) %>%
+  map_dbl("r.squared")
+```
+
+# Intro to Linear Models in R
+
+## Common Applications
+
+-   RNA-Seq differential expression analyses
+-   GWAS (for continuous traits)
+-   eQTL analyses
+-   Microarray data analyses
+
+## Linear Model Background
+
+$$
+Y \sim \beta_0 + x_1\beta_1 + x_2\beta_2 ...x_n\beta_n + \epsilon
+$$
+
+-   $Y$ is our outcome
+
+-   The covariates $x$ can be
+
+    -   Continuous (age, weight, temperature, etc.)
+
+    -   Categorical (treatment, batch, genotype, etc.)
+
+-   The $\beta$'s are unknown parameters to be estimated.
+
+-   The error term $\epsilon$ is assumed to be normally distributed with a variance that is constant across the range of the data.
+
+## lm() : R Function for Linear Models
+
+-   `lm()` expects a model formula
+-   `lm()` does more than just linear regression
+-   The formula is specified in the following format:
+
+```         
+Y ~ X
+gene ~ age               # Regression
+gene ~ sex               # One-way ANOVA
+gene ~ age + genotype    # Analysis of covariance
+```
+
+-   See [Formulas in R](https://www.ucd.ie/ecomodel/Resources/R_formulae_WebVersion.html) for an in depth explanation of using formulas to specify models in R
+
+## Example Dataset
+
+```{r}
+dat <- read.csv("https://raw.githubusercontent.com/ucdavis-bioinformatics-training/2018-September-Bioinformatics-Prerequisites/master/friday/lm_example_data.csv")
+head(dat) %>%
+  kableExtra::kable()
+```
+
+## Fitting the Model
+
+```{r}
+oneway_model <- lm(expression ~ treatment, data = dat)
+
+summary(oneway_model)
+```
+
+## Understanding the Model Outputs
+
+-   "Coefficients" refer to the $\beta$'s
+-   "Estimate" is the estimate of each coefficient (effect size)
+-   "Std. Error" is the standard error of the estimate
+-   "t value" is the coefficient divided by its standard error
+-   "Pr(\>\|t\|)"is the p-value for the coefficient
+
+## Understanding the Model Outputs (cont.)
+
+-   The residual standard error is the estimate of the variance of ϵ
+-   Degrees of freedom is the sample size minus \# of coefficients estimated
+-   R-squared is (roughly) the proportion of variance in the outcome explained by the model
+-   The F-statistic compares the fit of the model as a whole to the null model (with no covariates)
+
+## What do the Model Coefficients Mean?
+
+-   R uses reference group coding or "treatment contrasts".
+-   For categorical covariates, the first level alphabetically (or first factor level) is treated as the reference group.
+-   The reference group is represented by the intercept.
+-   Using control as a reference level is a common practice.
+
+## Coefficients in the Example
+
+-   Coefficients for other groups are the difference from the reference:
+
+    (Intercept) = the mean for treatmentA\
+    treatmentB = the mean for treatmentB - the mean for treatmentA\
+    treatmentC = the mean for treatmentC - the mean for treatmentA\
+    etc.
+
+## broom::tidy : Summary Table of Model Fit
+
+```{r}
+broom::tidy(oneway_model) %>%
+  arrange(desc(p.value)) %>%
+  kableExtra::kable()
+```
+
+## Model Matrices
+
+-   Tools like `limma` and `edgeR` use *design matrices* to specify the model
+
+-   The design matrix $X$
+
+    -   One row for each observation (sample)
+
+    -   One column for each model coefficient (treatment)
+
+```{r}
+X <- model.matrix(~ treatment, data = dat)
+head(X,4)
+```
+
+## Understanding Model Matrices
+
+-   Linear regression case:
+
+```{r}
+X <- model.matrix(expression ~ temperature, data = dat)
+X %>%
+  head() %>%
+  kableExtra::kable()
+```
+
+## Understanding Model Matrices (cont.)
+
+-   One-way ANOVA:
+
+```{r}
+X <- model.matrix(expression ~ treatment, data = dat)
+X %>%
+  as.data.frame() %>%
+  arrange(desc(treatmentB)) 
+```
+
+## Further Learning
+
+-   Follow the [full tutorial](https://ucdavis-bioinformatics-training.github.io/2019-March-Bioinformatics-Prerequisites/thursday/linear_models.html) and complete the exercises
+-   Learn about more advanced implementations of linear models:\
+-   [Generalized Linear Models](https://bookdown.org/steve_midway/DAR/glms-generalized-linear-models.html)\
+-   [Random Effects](https://bookdown.org/steve_midway/DAR/random-effects.html)
+
+# ChatGPT Tips for Bioinformatics
+
+## General Tips
+
+-   Always confirm ChatGPT's outputs are correct
+-   Provide as much detail as possible about the problem
+-   Use separate chats for separate tasks/projects
+-   Try the 'Custom Instructions' function that adds additional information to every query you run
+-   The new release can visit webpages (GPT 4 only), which can help get more specific answers
+
+## Code Tips
+
+-   Commented R code yields better responses in my experience
+-   Provide the code and error message in the same query
+-   ChatGPT works well to convert syntax and improve your code:
+    -   "Turn this loop into a function : [your code]"
+    -   "Is there a better way to do this : [your code]"
+-   Check out the file: `example_code/1_for_loop_to_apply.R` for an example use case
+
+# Finding Bioinformatics Packages
+
+## Key Questions
+
+-   What assay was the package designed for?
+-   When was the last release?
+-   Is it maintained (frequent updates)?
+-   Does it work on all operating systems?
+-   Are other people using it?
+-   Do they respond to github issues?
+-   Is there a benchmarking paper?
+
+## BioConductor and CRAN
+
+-   Both of these have stringent requirements for packages they host (eg. for BioConductor they have to run on all major operating systems)
+
+-   Prefer BioConductor packages if available over CRAN
+
+-   Prefer CRAN packages over ones only hosted on GitHub
+
+## Start with the Assay
+
+-   Click [here](https://www.bioconductor.org/packages/release/BiocViews.html#___Sequencing) to go to BioC views
+-   Pick the Assay you want to analyse
+-   Pick the type of analysis you want to do
+-   Find a package that does it
+-   Find benchmarking papers to narrow the list of packages down
+-   Find the vignette in on the package page
+
+## Using Packages Outside of Intended Usage
+
+-   Do NOT do this
+-   If you absolutely have to, make sure you can justify this to reviewers before you waste your time
+
+
+
+# Additional Resources
+
+## R
+
+-   [R Markdown: The Definitive Guide](https://bookdown.org/yihui/rmarkdown/how-to-read-this-book.html) : Excellent R markdown reference
+
+-   [R for Data Science](https://r4ds.hadley.nz/)
+
+-   [ggplot2: elegant graphics for data analysis](https://ggplot2-book.org/)
+
+-   [Advanced R](https://adv-r.hadley.nz/)
+
+## Statistics
+
+-   [Data Analysis in R](https://bookdown.org/steve_midway/DAR) : This book has more statistics details than *R for Data Science*
+-   [Generalized Linear Models](https://bookdown.org/steve_midway/DAR/glms-generalized-linear-models.html)\
+-   [Random Effects](https://bookdown.org/steve_midway/DAR/random-effects.html)
+
+## RNA-seq Analysis
+
+-   [RNA-seqlopedia](https://rnaseq.uoregon.edu/) : Everything you need to know about RNA-seq experiments
+-   [RNA-seq Expression Units](https://luisvalesilva.com/datasimple/rna-seq_units.html) : Blog post on understanding common units
+-   [Introduction to Single-Cell Analysis with Bioconductor](https://bioconductor.org/books/3.17/OSCA.intro/index.html) : Covers the basics of scRNA-seq analysis in R
+
+## Dimensional Reduction
+
+-   [Tutorial on PCA](https://uw.pressbooks.pub/appliedmultivariatestatistics/chapter/pca/) : PCA explained with R code examples
+-   [Understanding UMAP](https://pair-code.github.io/understanding-umap/) : Short explanation with great visualizations, mainly useful for scRNA-seq analysis
+
+
+
+# References
+
+-   Linear models section was adapted from:
+    -   [this page](https://ucdavis-bioinformatics-training.github.io/2019-March-Bioinformatics-Prerequisites/thursday/linear_models.html) created by the UC Davis Bioinformatics Core
